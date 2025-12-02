@@ -10,12 +10,10 @@ enum TimerMode { focus, shortBreak, longBreak }
 const int _focusCyclesBeforeLongBreak = 4;
 
 class TimerController extends ChangeNotifier {
-  // --- STATE DURASI ---
   int _focusDuration = 25 * 60;
   int _shortBreakDuration = 5 * 60;
   int _longBreakDuration = 15 * 60;
 
-  // --- STATE TIMER ---
   Timer? _timer;
   int _currentSeconds = 25 * 60;
   bool _isRunning = false;
@@ -23,16 +21,14 @@ class TimerController extends ChangeNotifier {
   TimerMode _currentMode = TimerMode.focus;
   int _focusCycleCount = 0;
 
-  // --- PERSISTENCE ---
   final StorageService _storageService = StorageService();
-  final Map<String, int> _dailySessionLogs = {};
+  final Map<String, int> _dailySessionLogs = {}; // Data di memori
   final DateFormat _logKeyFormat = DateFormat('yyyy-MM-dd');
 
   TimerController() {
     loadSettings();
   }
 
-  // --- GETTERS ---
   int get currentSeconds => _currentSeconds;
   bool get isRunning => _isRunning;
   int get focusSessionsCompletedTotal => _focusSessionsCompletedTotal;
@@ -67,13 +63,11 @@ class TimerController extends ChangeNotifier {
     TimerMode.longBreak => 'Istirahat Panjang (Isi Ulang Energi)',
   };
 
-  // --- HELPER SETTINGS ---
   Future<bool> _shouldPlaySound() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool('enableNotifications') ?? true;
   }
 
-  // --- PERSISTENCE LOGIC ---
   Future<void> loadSettings() async {
     _dailySessionLogs.addAll(await _storageService.loadAllDailySessions());
     _focusSessionsCompletedTotal =
@@ -84,9 +78,12 @@ class TimerController extends ChangeNotifier {
   Future<void> _logDailySessionCompletion() async {
     final todayKey = _logKeyFormat.format(DateTime.now());
     int currentCount = (_dailySessionLogs[todayKey] ?? 0) + 1;
-    _dailySessionLogs[todayKey] = currentCount;
+    _dailySessionLogs[todayKey] = currentCount; // Update memori
 
-    await _storageService.saveDailySessions(todayKey, currentCount);
+    await _storageService.saveDailySessions(
+      todayKey,
+      currentCount,
+    ); // Simpan ke disk
 
     _focusSessionsCompletedTotal++;
     await _storageService.saveInt(
@@ -110,24 +107,26 @@ class TimerController extends ChangeNotifier {
       );
     }
 
-    _dailySessionLogs[todayKey] = 0;
-    await _storageService.saveDailySessions(todayKey, 0);
+    _dailySessionLogs[todayKey] = 0; // Reset memori
+    await _storageService.saveDailySessions(todayKey, 0); // Simpan ke disk
 
     notifyListeners();
   }
 
+  // PERBAIKAN: Menggunakan clearAllDailySessions untuk menghapus total riwayat diagram
   Future<void> resetTotalFocusSessions() async {
+    // 1. Reset Counter Global
     _focusSessionsCompletedTotal = 0;
     await _storageService.saveInt('totalFocusSessions', 0);
 
+    // 2. Reset Memori (Map)
     _dailySessionLogs.clear();
-    final todayKey = _logKeyFormat.format(DateTime.now());
-    await _storageService.saveDailySessions(todayKey, 0);
+
+    // 3. Reset Disk (Timpa dengan kosong)
+    await _storageService.clearAllDailySessions();
 
     notifyListeners();
   }
-
-  // --- CORE LOGIC ---
 
   void startStopTimer() {
     if (_isRunning) {
@@ -175,7 +174,6 @@ class TimerController extends ChangeNotifier {
   }
 
   void _handleModeCompletion() async {
-    // 1. Ambil preferensi suara
     final bool playSound = await _shouldPlaySound();
 
     String notificationTitle;
@@ -206,14 +204,13 @@ class TimerController extends ChangeNotifier {
           'Saatnya kembali Fokus (${(_focusDuration / 60).round()} Menit).';
     }
 
-    // 2. Pass variabel playSound ke fungsi showNotification
     NotificationService.showNotification(
       id: 1,
       title: notificationTitle,
       body: notificationBody,
       isRunning: false,
       payload: 'timer_complete',
-      playSound: playSound, // <-- SUDAH DIGUNAKAN DI SINI
+      playSound: playSound,
     );
 
     notifyListeners();

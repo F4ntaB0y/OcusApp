@@ -14,7 +14,6 @@ class StorageService {
     return prefs.getString(key);
   }
 
-  // Menyimpan integer tunggal (untuk Total Sesi Fokus Global)
   Future<void> saveInt(String key, int value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(key, value);
@@ -25,16 +24,14 @@ class StorageService {
     return prefs.getInt(key);
   }
 
-  // Menyimpan satu hari (dengan membaca data lama dulu)
   Future<void> saveDailySessions(String dateKey, int count) async {
     final Map<String, int> logs = await loadAllDailySessions();
     logs[dateKey] = count;
     await _saveData(_keyDailySessions, json.encode(logs));
   }
 
-  // PERBAIKAN KRITIS: Menghapus SEMUA riwayat sesi harian (untuk Reset Global)
+  // PERBAIKAN UTAMA: Fungsi ini menimpa data lama dengan Map kosong
   Future<void> clearAllDailySessions() async {
-    // Menimpa data yang ada dengan Map kosong
     await _saveData(_keyDailySessions, json.encode({}));
   }
 
