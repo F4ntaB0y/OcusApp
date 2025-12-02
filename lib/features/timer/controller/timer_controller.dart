@@ -130,9 +130,6 @@ class TimerController extends ChangeNotifier {
   // --- CORE LOGIC ---
 
   void startStopTimer() {
-    // PERBAIKAN: Hapus variabel unused 'playSound' di sini.
-    // Notifikasi status (Start/Pause) kita biarkan silent agar tidak mengganggu.
-
     if (_isRunning) {
       _stopTimer();
       NotificationService.showNotification(
@@ -178,7 +175,7 @@ class TimerController extends ChangeNotifier {
   }
 
   void _handleModeCompletion() async {
-    // Logic suara tetap ada di sini (PENTING)
+    // 1. Ambil preferensi suara
     final bool playSound = await _shouldPlaySound();
 
     String notificationTitle;
@@ -209,13 +206,14 @@ class TimerController extends ChangeNotifier {
           'Saatnya kembali Fokus (${(_focusDuration / 60).round()} Menit).';
     }
 
+    // 2. Pass variabel playSound ke fungsi showNotification
     NotificationService.showNotification(
       id: 1,
       title: notificationTitle,
       body: notificationBody,
       isRunning: false,
       payload: 'timer_complete',
-      playSound: playSound, // <-- Menggunakan setting user
+      playSound: playSound, // <-- SUDAH DIGUNAKAN DI SINI
     );
 
     notifyListeners();

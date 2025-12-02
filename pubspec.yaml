@@ -35,7 +35,7 @@ flutter:
 
 # KONFIGURASI YANG BENAR:
 flutter_launcher_icons:
-  android: "ic_launcher" # <--- UBAH INI DARI "launcher_icon" KE "ic_launcher"
+  android: "ic_launcher"
   ios: true
   image_path: "assets/icon/icon.png"
   min_sdk_android: 21

@@ -1,3 +1,4 @@
+import 'dart:ui'; // Diperlukan untuk Color
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
@@ -36,10 +37,8 @@ class NotificationService {
     required String body,
     required bool isRunning,
     String? payload,
-    bool playSound = true, // Parameter Suara
+    bool playSound = true,
   }) async {
-    // PERBAIKAN KRITIS: Gunakan Channel ID berbeda untuk Mode Suara & Senyap
-    // Android mengunci pengaturan channel setelah dibuat. Kita harus memisahkannya.
     final String channelId = playSound
         ? 'ocus_channel_sound'
         : 'ocus_channel_silent';
@@ -64,19 +63,24 @@ class NotificationService {
       ),
     ];
 
-    final AndroidNotificationDetails androidPlatformChannelSpecifics =
-        AndroidNotificationDetails(
-          channelId, // ID Dinamis
-          channelName,
-          channelDescription: 'Notifikasi timer aplikasi Ocus',
-          importance: Importance.max,
-          priority: Priority.high,
-          ticker: 'ticker',
-          playSound:
-              playSound, // Boolean ini sekarang efektif karena ID channel baru
-          actions: actions,
-          styleInformation: const MediaStyleInformation(),
-        );
+    final AndroidNotificationDetails
+    androidPlatformChannelSpecifics = AndroidNotificationDetails(
+      channelId,
+      channelName,
+      channelDescription: 'Notifikasi timer aplikasi Ocus',
+      importance: Importance.max,
+      priority: Priority.high,
+      ticker: 'ticker',
+      playSound: playSound,
+      actions: actions,
+      styleInformation: const MediaStyleInformation(),
+
+      // --- PERUBAHAN: largeIcon DIHAPUS ---
+      // largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+
+      // Warna aksen notifikasi (Hijau Ocus) tetap ada
+      color: const Color(0xFF00FF00),
+    );
 
     final DarwinNotificationDetails iOSPlatformChannelSpecifics =
         DarwinNotificationDetails(
