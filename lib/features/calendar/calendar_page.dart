@@ -1,25 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:table_calendar/table_calendar.dart';
+import 'package:table_calendar/table_calendar.dart' as table_calendar;
 import 'package:intl/intl.dart';
 import 'package:focus_app/core/theme/app_colors.dart';
 import '../tasks/controller/task_controller.dart';
 import '../tasks/model/task.dart';
 import '../timer/controller/timer_controller.dart' as timer_ctrl;
 import '../tasks/add_edit_task_page.dart';
-import 'dart:math'; // Diperlukan untuk min/max
+import 'dart:math'; // Diperlukan untuk fungsi max()
 
 // --- MOLECULE: Stat Card ---
 class StatCard extends StatelessWidget {
   final String title;
   final String value;
   final IconData icon;
+  final VoidCallback? onReset;
 
   const StatCard({
     super.key,
     required this.title,
     required this.value,
     required this.icon,
+    this.onReset,
   });
 
   @override
@@ -30,26 +32,37 @@ class StatCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(icon, color: AppColors.primary, size: 36),
-            const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            Row(
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(color: Colors.grey, fontSize: 14),
-                ),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    color: AppColors.text,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Icon(icon, color: AppColors.primary, size: 36),
+                const SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(color: Colors.grey, fontSize: 14),
+                    ),
+                    Text(
+                      value,
+                      style: const TextStyle(
+                        color: AppColors.text,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
+
+            if (onReset != null)
+              IconButton(
+                icon: Icon(Icons.refresh, color: Colors.red.shade400),
+                onPressed: onReset,
+              ),
           ],
         ),
       ),
@@ -65,12 +78,12 @@ class StatisticsPage extends StatefulWidget {
 }
 
 class _StatisticsPageState extends State<StatisticsPage> {
+  // Fields
   late DateTime _focusedDay;
   DateTime? _selectedDay;
   late final ValueNotifier<List<Task>> _selectedEvents;
 
   final Map<DateTime, List<Task>> _tasksByDay = {};
-  final DateFormat _logKeyFormat = DateFormat('yyyy-MM-dd'); // Format kunci log
 
   @override
   void initState() {
@@ -119,7 +132,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
   }
 
   void _onDaySelected(DateTime selectedDay, DateTime focusedDay) {
-    if (!isSameDay(_selectedDay, selectedDay)) {
+    if (!table_calendar.isSameDay(_selectedDay, selectedDay)) {
       setState(() {
         _selectedDay = selectedDay;
         _focusedDay = focusedDay;
@@ -239,33 +252,42 @@ class _StatisticsPageState extends State<StatisticsPage> {
     );
   }
 
-  // FUNGSI BAR CHART RIIL
+  // PERBAIKAN: Menggunakan data riil dari dailySessionLogs
   Widget _buildWeeklyBarChart(
     BuildContext context,
     timer_ctrl.TimerController controller,
   ) {
+    // Format tanggal untuk kunci log (harus sama dengan di TimerController)
+    final DateFormat logKeyFormat = DateFormat('yyyy-MM-dd');
     final now = DateTime.now();
+
+    // 1. Tentukan awal minggu (Senin)
     int daysToSubtract = now.weekday - 1;
     DateTime startOfWeek = _normalizeDate(
       now.subtract(Duration(days: daysToSubtract)),
     );
 
     final List<int> weeklySessions = [];
-    final Map<String, int> dailyLogs = controller.dailySessionLogs;
+    final Map<String, int> dailyLogs = controller.dailySessionLogs; // Data riil
 
+    // 2. Kumpulkan data sesi untuk 7 hari ini (Senin - Minggu)
     for (int i = 0; i < 7; i++) {
       final date = startOfWeek.add(Duration(days: i));
-      final dateKey = _logKeyFormat.format(date);
-      final sessions = dailyLogs[dateKey] ?? 0;
+      final dateKey = logKeyFormat.format(date);
+      final sessions =
+          dailyLogs[dateKey] ?? 0; // Ambil sesi aktual, atau 0 jika tidak ada
       weeklySessions.add(sessions);
     }
 
+    // 3. Hitung nilai maksimum untuk skala chart
     const maxChartHeight = 100.0;
+    // Mencari nilai tertinggi dalam seminggu untuk normalisasi tinggi bar
     int maxDataValue = weeklySessions.reduce(max);
-    if (maxDataValue == 0) maxDataValue = 1;
-    final totalSessions = weeklySessions.reduce((a, b) => a + b);
+    if (maxDataValue == 0) maxDataValue = 1; // Cegah pembagian dengan nol
 
-    if (totalSessions == 0) {
+    final totalWeeklySessions = weeklySessions.reduce((a, b) => a + b);
+
+    if (totalWeeklySessions == 0) {
       return Container(
         margin: const EdgeInsets.only(top: 10, bottom: 20),
         height: 150,
@@ -275,7 +297,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
           borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
-          'Mulai fokus untuk melihat diagram!',
+          'Belum ada aktivitas minggu ini.',
           style: TextStyle(color: Colors.grey.shade500),
         ),
       );
@@ -307,11 +329,14 @@ class _StatisticsPageState extends State<StatisticsPage> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: List.generate(7, (index) {
               final sessions = weeklySessions[index];
+              // Hitung tinggi bar relatif terhadap nilai maksimum minggu ini
               final height = (sessions / maxDataValue) * maxChartHeight;
 
-              bool isToday =
-                  _normalizeDate(startOfWeek.add(Duration(days: index))) ==
-                  _normalizeDate(now);
+              // Tandai hari ini
+              bool isToday = table_calendar.isSameDay(
+                _normalizeDate(now),
+                _normalizeDate(startOfWeek.add(Duration(days: index))),
+              );
               Color barColor = isToday
                   ? Colors.green.shade400
                   : AppColors.primary;
@@ -326,9 +351,11 @@ class _StatisticsPageState extends State<StatisticsPage> {
                   const SizedBox(height: 4),
                   Container(
                     width: 20,
-                    height: height.clamp(5.0, maxChartHeight),
+                    height: height.clamp(
+                      5.0,
+                      maxChartHeight,
+                    ), // Tinggi minimal 5 agar terlihat jika ada data sedikit
                     decoration: BoxDecoration(
-                      // PERBAIKAN: Mengganti withOpacity
                       color: barColor.withAlpha(
                         204 + (0.2 * 255 * (height / maxChartHeight)).round(),
                       ),
@@ -349,6 +376,61 @@ class _StatisticsPageState extends State<StatisticsPage> {
                 ],
               );
             }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Fungsi reset spesifik untuk Sesi Fokus (Reset Harian)
+  void confirmResetFocusStats() {
+    final timerController = context.read<timer_ctrl.TimerController>();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset Sesi Fokus Hari Ini?'),
+        content: const Text(
+          'Ini hanya akan mereset hitungan sesi fokus untuk hari ini menjadi nol.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () {
+              timerController.resetTodayFocusSessions();
+              Navigator.pop(ctx);
+            },
+            child: Text('Reset', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void confirmResetTaskStatus() {
+    final taskController = context.read<TaskController>();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset Status Tugas?'),
+        content: const Text(
+          'Ini akan mereset Status Tugas Selesai menjadi Tertunda (Berlaku untuk semua tugas).',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () {
+              taskController.resetAllCompletedTasksStatus();
+              Navigator.pop(ctx);
+            },
+            child: Text('Reset', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -386,11 +468,11 @@ class _StatisticsPageState extends State<StatisticsPage> {
                 color: AppColors.cardBackground,
                 borderRadius: BorderRadius.circular(10.0),
               ),
-              child: TableCalendar<Task>(
+              child: table_calendar.TableCalendar<Task>(
                 firstDay: DateTime.utc(2023, 1, 1),
                 lastDay: DateTime.utc(2030, 12, 31),
                 focusedDay: _focusedDay,
-                headerStyle: HeaderStyle(
+                headerStyle: table_calendar.HeaderStyle(
                   formatButtonVisible: false,
                   titleCentered: true,
                   titleTextStyle: const TextStyle(
@@ -407,23 +489,31 @@ class _StatisticsPageState extends State<StatisticsPage> {
                     color: AppColors.text,
                   ),
                 ),
-                selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                selectedDayPredicate: (day) =>
+                    table_calendar.isSameDay(_selectedDay, day),
                 onDaySelected: _onDaySelected,
                 eventLoader: _getTasksForDay,
-                calendarBuilders: CalendarBuilders(
+                calendarBuilders: table_calendar.CalendarBuilders(
                   markerBuilder: (context, day, tasks) {
                     if (tasks.isNotEmpty) {
-                      // PERBAIKAN MARKER COLOR
+                      // Logic Marker
+                      final now = DateTime.now();
+                      Color markerColor;
                       bool hasOverdue = tasks.any(
                         (t) =>
                             !t.isCompleted &&
-                            (t.deadline != null &&
-                                t.deadline!.isBefore(DateTime.now())),
+                            (t.deadline != null && t.deadline!.isBefore(now)),
                       );
-                      Color markerColor = hasOverdue
-                          ? Colors.red
-                          : AppColors
-                                .primary; // Merah jika terlewat, Hijau jika aktif
+
+                      if (hasOverdue) {
+                        markerColor =
+                            Colors.red; // Merah jika ada yang terlewat
+                      } else if (tasks.every((t) => t.isCompleted)) {
+                        markerColor = Colors.grey; // Abu-abu jika semua selesai
+                      } else {
+                        markerColor =
+                            Colors.green.shade400; // Hijau jika aktif/pending
+                      }
 
                       return Positioned(
                         right: 1,
@@ -451,7 +541,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Deadline Tugas Dipilih (${_selectedDay != null ? DateFormat('EEEE, d MMMM').format(_selectedDay!) : 'Pilih Tanggal'})',
+                    'Deadline Tugas Dipilih (${_selectedDay != null ? DateFormat('d MMMM').format(_selectedDay!) : 'Pilih Tanggal'})',
                     style: const TextStyle(
                       color: AppColors.text,
                       fontSize: 18,
@@ -483,7 +573,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
                         itemCount: tasks.length,
                         itemBuilder: (context, index) {
                           final task = tasks[index];
-                          // PERBAIKAN: List item yang benar
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 8.0),
                             child: InkWell(
@@ -546,31 +635,35 @@ class _StatisticsPageState extends State<StatisticsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Diagram Batang (Memanggil fungsi)
+                  // Diagram Batang (Memanggil fungsi _buildWeeklyBarChart)
                   _buildWeeklyBarChart(context, timerController),
 
+                  const SizedBox(height: 20),
                   const Text(
-                    'Ringkasan Kinerja',
+                    'Aktivitas Harian',
                     style: TextStyle(
                       color: AppColors.primary,
-                      fontSize: 20,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const Divider(color: Colors.grey),
 
-                  // Stat Cards
                   StatCard(
-                    title: 'Total Sesi Fokus Selesai',
-                    value: timerController.focusSessionsCompleted.toString(),
-                    icon: Icons.access_time_filled,
+                    title: 'Sesi Fokus Hari Ini',
+                    value: timerController.todayFocusSessionsCompleted
+                        .toString(),
+                    icon: Icons.check_circle_outline,
+                    onReset: confirmResetFocusStats,
                   ),
 
                   StatCard(
-                    title: 'Tugas Selesai',
-                    value: taskController.completedTasks.length.toString(),
+                    title: 'Tugas Selesai Hari Ini',
+                    value: taskController.todayCompletedTasks.toString(),
                     icon: Icons.task_alt,
+                    onReset: confirmResetTaskStatus,
                   ),
+
                   const SizedBox(height: 20),
                 ],
               ),

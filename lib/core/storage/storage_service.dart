@@ -1,25 +1,43 @@
-// lib/core/storage/storage_service.dart
-
-import 'package:flutter/material.dart';
-
-// Catatan: Dalam aplikasi Flutter nyata, Anda akan menggunakan paket seperti
-// shared_preferences atau Hive. Kelas ini mensimulasikan fungsionalitasnya.
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class StorageService {
-  // Penyimpanan internal tiruan: {'2025-11-18': 5, ...}
-  static final Map<String, int> _dailySessions = {};
+  final String _keyDailySessions = 'dailySessionLogs';
 
-  // Metode tiruan untuk menyimpan jumlah sesi harian
-  Future<void> saveDailySessions(String dateKey, int count) async {
-    // Simulasi operasi penyimpanan asinkron
-    _dailySessions[dateKey] = count;
-    debugPrint('StorageService: Saved $count sessions for $dateKey');
+  Future<void> _saveData(String key, String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(key, value);
   }
 
-  // Metode tiruan untuk mengambil semua hitungan sesi harian
+  Future<String?> _loadData(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(key);
+  }
+
+  // --- BARU: Method untuk Integer Tunggal (Global Counters) ---
+  Future<void> saveInt(String key, int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(key, value);
+  }
+
+  Future<int?> loadInt(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(key);
+  }
+  // ------------------------------------------------------------
+
+  Future<void> saveDailySessions(String dateKey, int count) async {
+    final Map<String, int> logs = await loadAllDailySessions();
+    logs[dateKey] = count;
+    await _saveData(_keyDailySessions, json.encode(logs));
+  }
+
   Future<Map<String, int>> loadAllDailySessions() async {
-    // Simulasi operasi penyimpanan asinkron
-    debugPrint('StorageService: Loading all sessions: $_dailySessions');
-    return Map.from(_dailySessions); // Kembalikan salinan
+    final String? jsonString = await _loadData(_keyDailySessions);
+    if (jsonString != null) {
+      final Map<String, dynamic> decoded = json.decode(jsonString);
+      return decoded.map((key, value) => MapEntry(key, value as int));
+    }
+    return {};
   }
 }

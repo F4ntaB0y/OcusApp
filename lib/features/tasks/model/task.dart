@@ -1,12 +1,20 @@
+// lib/features/tasks/model/task.dart
+
+// Hapus import uuid karena tidak dipakai di sini (dipakai di controller)
+// import 'package:uuid/uuid.dart';
+
+enum TaskCompletionStatus { onTime, late }
+
 class Task {
   final String id;
   final String title;
   final String description;
-  final int pomodoroCount; // Field ini yang perlu di-update
+  final int pomodoroCount;
   final bool isCompleted;
   final DateTime? deadline;
   final DateTime createdAt;
   final DateTime? completedAt;
+  final TaskCompletionStatus? completionStatus;
 
   Task({
     required this.id,
@@ -17,62 +25,68 @@ class Task {
     this.deadline,
     required this.createdAt,
     this.completedAt,
+    this.completionStatus,
   });
 
-  // FUNGSI BARU: Konversi objek Task ke Map (JSON)
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'title': title,
-    'description': description,
-    'pomodoroCount': pomodoroCount,
-    'isCompleted': isCompleted,
-    'deadline': deadline?.toIso8601String(),
-    'createdAt': createdAt.toIso8601String(),
-    'completedAt': completedAt?.toIso8601String(),
-  };
-
-  // FUNGSI BARU: Buat objek Task dari Map (JSON)
   factory Task.fromJson(Map<String, dynamic> json) {
-    DateTime? parseDate(String? dateString) {
-      if (dateString == null) return null;
-      try {
-        return DateTime.parse(dateString);
-      } catch (e) {
-        return null;
-      }
-    }
-
     return Task(
       id: json['id'] as String,
       title: json['title'] as String,
-      description: json['description'] as String? ?? '',
-      pomodoroCount: json['pomodoroCount'] as int? ?? 1,
-      isCompleted: json['isCompleted'] as bool? ?? false,
-      deadline: parseDate(json['deadline'] as String?),
-      createdAt: parseDate(json['createdAt'] as String?) ?? DateTime.now(),
-      completedAt: parseDate(json['completedAt'] as String?),
+      description: json['description'] as String,
+      pomodoroCount: json['pomodoroCount'] as int,
+      isCompleted: json['isCompleted'] as bool,
+      deadline: json['deadline'] != null
+          ? DateTime.parse(json['deadline'] as String)
+          : null,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      completedAt: json['completedAt'] != null
+          ? DateTime.parse(json['completedAt'] as String)
+          : null,
+      completionStatus: json['completionStatus'] != null
+          ? TaskCompletionStatus.values.firstWhere(
+              (e) =>
+                  e.toString() ==
+                  'TaskCompletionStatus.${json['completionStatus']}',
+            )
+          : null,
     );
   }
 
-  // PERBAIKAN KRITIS: Tambahkan pomodoroCount ke copyWith
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'pomodoroCount': pomodoroCount,
+      'isCompleted': isCompleted,
+      'deadline': deadline?.toIso8601String(),
+      'createdAt': createdAt.toIso8601String(),
+      'completedAt': completedAt?.toIso8601String(),
+      'completionStatus': completionStatus?.name,
+    };
+  }
+
   Task copyWith({
+    String? id,
     String? title,
     String? description,
-    DateTime? deadline,
+    int? pomodoroCount,
     bool? isCompleted,
+    DateTime? deadline,
+    DateTime? createdAt,
     DateTime? completedAt,
-    int? pomodoroCount, // <-- INI YANG HILANG
+    TaskCompletionStatus? completionStatus,
   }) {
     return Task(
-      id: id,
+      id: id ?? this.id,
       title: title ?? this.title,
       description: description ?? this.description,
-      // Gunakan pomodoroCount yang baru jika disediakan
       pomodoroCount: pomodoroCount ?? this.pomodoroCount,
       isCompleted: isCompleted ?? this.isCompleted,
-      deadline: deadline,
-      createdAt: createdAt,
-      completedAt: completedAt,
+      deadline: deadline ?? this.deadline,
+      createdAt: createdAt ?? this.createdAt,
+      completedAt: completedAt ?? this.completedAt,
+      completionStatus: completionStatus ?? this.completionStatus,
     );
   }
 }

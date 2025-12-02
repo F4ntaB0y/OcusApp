@@ -3,7 +3,7 @@ import 'package:uuid/uuid.dart';
 import 'dart:collection';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../model/task.dart';
+import '../model/task.dart'; // <-- Pastikan ini mengimpor TaskCompletionStatus
 
 class TaskController extends ChangeNotifier {
   static const Uuid _uuid = Uuid();
@@ -20,6 +20,38 @@ class TaskController extends ChangeNotifier {
       _tasks.where((task) => !task.isCompleted).toList();
   List<Task> get completedTasks =>
       _tasks.where((task) => task.isCompleted).toList();
+
+  // GETTERS UNTUK STATISTIK TEPAT WAKTU/TERLAMBAT (Total Global)
+  List<Task> get allCompletedTasks =>
+      _tasks.where((task) => task.isCompleted).toList();
+  List<Task> get onTimeCompletedTasks => allCompletedTasks
+      .where((task) => task.completionStatus == TaskCompletionStatus.onTime)
+      .toList();
+  List<Task> get lateCompletedTasks => allCompletedTasks
+      .where((task) => task.completionStatus == TaskCompletionStatus.late)
+      .toList();
+
+  int get totalTasksCompleted => allCompletedTasks.length;
+  int get totalTasksOnTime => onTimeCompletedTasks.length;
+  int get totalTasksLate => lateCompletedTasks.length;
+
+  // PERBAIKAN: Getter untuk Tugas Selesai Harian (Filter berdasarkan completedAt hari ini)
+  int get todayCompletedTasks {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    return _tasks.where((task) {
+      if (task.isCompleted && task.completedAt != null) {
+        final completionDate = DateTime(
+          task.completedAt!.year,
+          task.completedAt!.month,
+          task.completedAt!.day,
+        );
+        return completionDate == today;
+      }
+      return false;
+    }).length;
+  }
 
   Future<void> _saveTasks() async {
     final prefs = await SharedPreferences.getInstance();
@@ -42,30 +74,7 @@ class TaskController extends ChangeNotifier {
             .toList(),
       );
     } else {
-      // Data contoh awal
-      _tasks.addAll([
-        Task(
-          id: _uuid.v4(),
-          title: 'Setup Environment Flutter Baru',
-          description:
-              'Pastikan Flutter SDK, VSCode, dan Android Studio sudah terinstal dengan benar.',
-          pomodoroCount: 2,
-          isCompleted: false,
-          deadline: DateTime.now().add(const Duration(days: 3)),
-          createdAt: DateTime.now().subtract(const Duration(days: 1)),
-          completedAt: null,
-        ),
-        Task(
-          id: _uuid.v4(),
-          title: 'Baca E-book Clean Code Bab 1-3',
-          description: 'Fokus pada prinsip penamaan variabel dan fungsi.',
-          pomodoroCount: 1,
-          isCompleted: false,
-          deadline: DateTime.now().add(const Duration(hours: 5)),
-          createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-          completedAt: null,
-        ),
-      ]);
+      _tasks.clear();
     }
 
     notifyListeners();
@@ -86,6 +95,7 @@ class TaskController extends ChangeNotifier {
       createdAt: DateTime.now(),
       completedAt: null,
       pomodoroCount: pomodoroCount,
+      completionStatus: null,
     );
     _tasks.add(newTask);
     notifyListeners();
@@ -97,7 +107,7 @@ class TaskController extends ChangeNotifier {
     String? title,
     String? description,
     DateTime? deadline,
-    int? pomodoroCount, // Parameter ini sekarang valid di copyWith
+    int? pomodoroCount,
   }) {
     final index = _tasks.indexWhere((task) => task.id == id);
     if (index != -1) {
@@ -116,10 +126,27 @@ class TaskController extends ChangeNotifier {
     final index = _tasks.indexWhere((task) => task.id == id);
     if (index != -1) {
       final task = _tasks[index];
+      final bool becomingCompleted = !task.isCompleted;
+
+      TaskCompletionStatus? status;
+      DateTime? completionTime;
+
+      if (becomingCompleted) {
+        completionTime = DateTime.now();
+        if (task.deadline != null && completionTime.isAfter(task.deadline!)) {
+          status = TaskCompletionStatus.late; // TERLAMBAT
+        } else {
+          status = TaskCompletionStatus.onTime; // TEPAT WAKTU
+        }
+      } else {
+        status = null;
+        completionTime = null;
+      }
 
       _tasks[index] = task.copyWith(
-        isCompleted: !task.isCompleted,
-        completedAt: !task.isCompleted ? DateTime.now() : null,
+        isCompleted: becomingCompleted,
+        completedAt: completionTime,
+        completionStatus: status,
       );
 
       if (_tasks[index].isCompleted) {
@@ -130,6 +157,30 @@ class TaskController extends ChangeNotifier {
       notifyListeners();
       _saveTasks();
     }
+  }
+
+  void resetAllCompletedTasksStatus() {
+    for (var i = 0; i < _tasks.length; i++) {
+      if (_tasks[i].isCompleted) {
+        _tasks[i] = _tasks[i].copyWith(
+          isCompleted: false,
+          completedAt: null,
+          completionStatus: null,
+        );
+      }
+    }
+    _tasks.sort(
+      (a, b) => a.isCompleted == b.isCompleted ? 0 : (a.isCompleted ? 1 : -1),
+    );
+
+    notifyListeners();
+    _saveTasks();
+  }
+
+  void deleteAllCompletedTasks() {
+    _tasks.removeWhere((task) => task.isCompleted);
+    notifyListeners();
+    _saveTasks();
   }
 
   void deleteTask(String id) {

@@ -35,7 +35,6 @@ class SettingsPage extends StatelessWidget {
                 onChanged: (newValue) {
                   focusMinutes = newValue;
                   controller.setDurations(
-                    // Panggilan sudah benar
                     focusMinutes: focusMinutes,
                     shortBreakMinutes: shortBreakMinutes,
                     longBreakMinutes: longBreakMinutes,
@@ -53,7 +52,6 @@ class SettingsPage extends StatelessWidget {
                 onChanged: (newValue) {
                   shortBreakMinutes = newValue;
                   controller.setDurations(
-                    // Panggilan sudah benar
                     focusMinutes: focusMinutes,
                     shortBreakMinutes: shortBreakMinutes,
                     longBreakMinutes: longBreakMinutes,
@@ -71,7 +69,6 @@ class SettingsPage extends StatelessWidget {
                 onChanged: (newValue) {
                   longBreakMinutes = newValue;
                   controller.setDurations(
-                    // Panggilan sudah benar
                     focusMinutes: focusMinutes,
                     shortBreakMinutes: shortBreakMinutes,
                     longBreakMinutes: longBreakMinutes,

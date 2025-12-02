@@ -1,32 +1,33 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:focus_app/core/storage/storage_service.dart';
+import 'package:focus_app/core/notifications/notification_service.dart';
 
 enum TimerMode { focus, shortBreak, longBreak }
 
 const int _focusCyclesBeforeLongBreak = 4;
 
 class TimerController extends ChangeNotifier {
-  // --- STATE DURASI YANG DAPAT DISETEL (Dalam detik) ---
+  // --- STATE DURASI ---
   int _focusDuration = 25 * 60;
   int _shortBreakDuration = 5 * 60;
   int _longBreakDuration = 15 * 60;
 
-  // --- STATE TIMER AKTUAL ---
+  // --- STATE TIMER ---
   Timer? _timer;
   int _currentSeconds = 25 * 60;
   bool _isRunning = false;
-  int _focusSessionsCompleted = 0;
+  int _focusSessionsCompletedTotal = 0;
   TimerMode _currentMode = TimerMode.focus;
   int _focusCycleCount = 0;
 
-  // --- STATE PERSISTENCE ---
+  // --- PERSISTENCE ---
   final StorageService _storageService = StorageService();
   final Map<String, int> _dailySessionLogs = {};
   final DateFormat _logKeyFormat = DateFormat('yyyy-MM-dd');
 
-  // --- CONSTRUCTOR ---
   TimerController() {
     loadSettings();
   }
@@ -34,7 +35,12 @@ class TimerController extends ChangeNotifier {
   // --- GETTERS ---
   int get currentSeconds => _currentSeconds;
   bool get isRunning => _isRunning;
-  int get focusSessionsCompleted => _focusSessionsCompleted;
+  int get focusSessionsCompletedTotal => _focusSessionsCompletedTotal;
+  int get todayFocusSessionsCompleted {
+    final todayKey = _logKeyFormat.format(DateTime.now());
+    return _dailySessionLogs[todayKey] ?? 0;
+  }
+
   TimerMode get currentMode => _currentMode;
   int get focusCycleCount => _focusCycleCount;
   int get focusDuration => _focusDuration;
@@ -49,33 +55,29 @@ class TimerController extends ChangeNotifier {
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
-  String get modeTitle {
-    switch (_currentMode) {
-      case TimerMode.focus:
-        return 'Fokus Belajar';
-      case TimerMode.shortBreak:
-        return 'Istirahat Pendek';
-      case TimerMode.longBreak:
-        return 'Istirahat Panjang';
-    }
-    // PERBAIKAN: Hapus return '' yang menyebabkan dead code
-  }
+  String get modeTitle => switch (_currentMode) {
+    TimerMode.focus => 'Fokus Belajar',
+    TimerMode.shortBreak => 'Istirahat Pendek',
+    TimerMode.longBreak => 'Istirahat Panjang',
+  };
 
-  String get modeDescription {
-    switch (_currentMode) {
-      case TimerMode.focus:
-        return 'Saatnya fokus penuh pada tugas Anda';
-      case TimerMode.shortBreak:
-        return 'Istirahat Pendek (Pendinginan)';
-      case TimerMode.longBreak:
-        return 'Istirahat Panjang (Isi Ulang Energi)';
-    }
-    // PERBAIKAN: Hapus return '' yang menyebabkan dead code
+  String get modeDescription => switch (_currentMode) {
+    TimerMode.focus => 'Saatnya fokus penuh pada tugas Anda',
+    TimerMode.shortBreak => 'Istirahat Pendek (Pendinginan)',
+    TimerMode.longBreak => 'Istirahat Panjang (Isi Ulang Energi)',
+  };
+
+  // --- HELPER SETTINGS ---
+  Future<bool> _shouldPlaySound() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('enableNotifications') ?? true;
   }
 
   // --- PERSISTENCE LOGIC ---
   Future<void> loadSettings() async {
     _dailySessionLogs.addAll(await _storageService.loadAllDailySessions());
+    _focusSessionsCompletedTotal =
+        await _storageService.loadInt('totalFocusSessions') ?? 0;
     notifyListeners();
   }
 
@@ -85,16 +87,72 @@ class TimerController extends ChangeNotifier {
     _dailySessionLogs[todayKey] = currentCount;
 
     await _storageService.saveDailySessions(todayKey, currentCount);
+
+    _focusSessionsCompletedTotal++;
+    await _storageService.saveInt(
+      'totalFocusSessions',
+      _focusSessionsCompletedTotal,
+    );
+
+    notifyListeners();
+  }
+
+  Future<void> resetTodayFocusSessions() async {
+    final todayKey = _logKeyFormat.format(DateTime.now());
+    int sessionToday = _dailySessionLogs[todayKey] ?? 0;
+
+    if (sessionToday > 0) {
+      _focusSessionsCompletedTotal -= sessionToday;
+      if (_focusSessionsCompletedTotal < 0) _focusSessionsCompletedTotal = 0;
+      await _storageService.saveInt(
+        'totalFocusSessions',
+        _focusSessionsCompletedTotal,
+      );
+    }
+
+    _dailySessionLogs[todayKey] = 0;
+    await _storageService.saveDailySessions(todayKey, 0);
+
+    notifyListeners();
+  }
+
+  Future<void> resetTotalFocusSessions() async {
+    _focusSessionsCompletedTotal = 0;
+    await _storageService.saveInt('totalFocusSessions', 0);
+
+    _dailySessionLogs.clear();
+    final todayKey = _logKeyFormat.format(DateTime.now());
+    await _storageService.saveDailySessions(todayKey, 0);
+
     notifyListeners();
   }
 
   // --- CORE LOGIC ---
 
   void startStopTimer() {
+    // PERBAIKAN: Hapus variabel unused 'playSound' di sini.
+    // Notifikasi status (Start/Pause) kita biarkan silent agar tidak mengganggu.
+
     if (_isRunning) {
       _stopTimer();
+      NotificationService.showNotification(
+        id: 1,
+        title: modeTitle,
+        body: 'Dijeda. Tekan untuk Lanjut.',
+        isRunning: false,
+        payload: 'timer_paused',
+        playSound: false,
+      );
     } else {
       _startTimer();
+      NotificationService.showNotification(
+        id: 1,
+        title: modeTitle,
+        body: 'Sedang berjalan. Waktu: $formattedTime',
+        isRunning: true,
+        payload: 'timer_running',
+        playSound: false,
+      );
     }
     notifyListeners();
   }
@@ -119,9 +177,14 @@ class TimerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _handleModeCompletion() {
+  void _handleModeCompletion() async {
+    // Logic suara tetap ada di sini (PENTING)
+    final bool playSound = await _shouldPlaySound();
+
+    String notificationTitle;
+    String notificationBody;
+
     if (_currentMode == TimerMode.focus) {
-      _focusSessionsCompleted++;
       _focusCycleCount++;
       _logDailySessionCompletion();
 
@@ -129,14 +192,32 @@ class TimerController extends ChangeNotifier {
         _currentMode = TimerMode.longBreak;
         _currentSeconds = _longBreakDuration;
         _focusCycleCount = 0;
+        notificationBody =
+            'Mulai Istirahat Panjang (${(_longBreakDuration / 60).round()} Menit).';
       } else {
         _currentMode = TimerMode.shortBreak;
         _currentSeconds = _shortBreakDuration;
+        notificationBody =
+            'Mulai Istirahat Pendek (${(_shortBreakDuration / 60).round()} Menit).';
       }
+      notificationTitle = 'Waktu Fokus HABIS!';
     } else {
       _currentMode = TimerMode.focus;
       _currentSeconds = _focusDuration;
+      notificationTitle = 'Istirahat Selesai!';
+      notificationBody =
+          'Saatnya kembali Fokus (${(_focusDuration / 60).round()} Menit).';
     }
+
+    NotificationService.showNotification(
+      id: 1,
+      title: notificationTitle,
+      body: notificationBody,
+      isRunning: false,
+      payload: 'timer_complete',
+      playSound: playSound, // <-- Menggunakan setting user
+    );
+
     notifyListeners();
   }
 

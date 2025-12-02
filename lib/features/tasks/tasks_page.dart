@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:focus_app/core/theme/app_colors.dart';
 import 'controller/task_controller.dart';
 import '../tasks/model/task.dart';
-import '../timer/controller/timer_controller.dart';
+import '../timer/controller/timer_controller.dart' as timer_ctrl;
 import 'add_edit_task_page.dart';
 
 // --- MOLECULE: Task Item Widget ---
@@ -24,9 +24,9 @@ class TaskItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    bool isPending = !task.isCompleted;
+    final bool isPending = !task.isCompleted;
 
-    String deadlineText = task.deadline != null
+    final String deadlineText = task.deadline != null
         ? 'Deadline: ${DateFormat('d/MM HH:mm').format(task.deadline!)}'
         : 'Tidak ada deadline';
 
@@ -34,7 +34,11 @@ class TaskItem extends StatelessWidget {
       padding: const EdgeInsets.only(left: 16, right: 8, top: 8, bottom: 8),
       margin: const EdgeInsets.only(bottom: 8.0),
       decoration: BoxDecoration(
-        color: isPending ? AppColors.cardBackground : Colors.black,
+        color: isPending
+            ? Theme.of(context).cardColor
+            : (Theme.of(context).brightness == Brightness.dark
+                  ? Colors.black
+                  : Colors.grey.shade300),
         borderRadius: BorderRadius.circular(8.0),
       ),
       child: Row(
@@ -65,7 +69,9 @@ class TaskItem extends StatelessWidget {
                     Text(
                       task.title,
                       style: TextStyle(
-                        color: isPending ? AppColors.text : Colors.grey,
+                        color: isPending
+                            ? Theme.of(context).textTheme.bodyLarge?.color
+                            : Colors.grey,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                         decoration: task.isCompleted
@@ -102,7 +108,7 @@ class TaskItem extends StatelessWidget {
             ),
           ),
 
-          // 3. TOMBOL HAPUS
+          // 3. TOMBOL HAPUS (Trailing)
           Padding(
             padding: const EdgeInsets.only(top: 8.0),
             child: IconButton(
@@ -121,7 +127,7 @@ class TasksPage extends StatelessWidget {
   const TasksPage({super.key});
 
   void startFocusOnTask(BuildContext context, Task task) {
-    final timerController = context.read<TimerController>();
+    final timerController = context.read<timer_ctrl.TimerController>();
 
     if (!timerController.isRunning) {
       timerController.startStopTimer();
@@ -146,7 +152,6 @@ class TasksPage extends StatelessWidget {
     }
   }
 
-  // PERBAIKAN: Fungsi Detail Tugas kembali menjadi AlertDialog
   void _showTaskDetailsDialog(BuildContext context, Task task) {
     showDialog(
       context: context,
@@ -209,12 +214,10 @@ class TasksPage extends StatelessWidget {
             ),
           ),
           actions: <Widget>[
-            // Tombol EDIT (Memindahkan ke halaman edit)
             TextButton(
               onPressed: () {
-                Navigator.pop(dialogContext); // Tutup dialog
+                Navigator.pop(dialogContext);
                 Navigator.of(context).push(
-                  // Navigasi ke halaman edit
                   MaterialPageRoute(
                     builder: (ctx) => AddEditTaskPage(taskToEdit: task),
                   ),
@@ -237,11 +240,27 @@ class TasksPage extends StatelessWidget {
     );
   }
 
-  // Fungsi penambahan tugas (menggunakan navigasi)
-  void _navigateToAddTask(BuildContext context) {
+  void navigateToAddTask(BuildContext context) {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (ctx) => const AddEditTaskPage()));
+  }
+
+  // Widget untuk tampilan kosong di tengah layar
+  Widget _buildEmptyTasksView() {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        return SingleChildScrollView(
+          child: Center(
+            child: Text(
+              'Tidak ada tugas saat ini. Tambahkan tugas baru!',
+              style: TextStyle(color: Colors.grey, fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -259,69 +278,68 @@ class TasksPage extends StatelessWidget {
       body: Consumer<TaskController>(
         builder: (context, controller, child) {
           final pendingTasks = controller.pendingTasks;
-          final completedTasks = controller.completedTasks;
+          final completedTasks = controller.tasks
+              .where((t) => t.isCompleted)
+              .toList();
+          final bool isListEmpty =
+              pendingTasks.isEmpty && completedTasks.isEmpty;
 
-          return Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          if (isListEmpty) {
+            return _buildEmptyTasksView();
+          }
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: <Widget>[
+              // --- 1. Tugas yang Belum Selesai (Fokus Anda) ---
+              const Text(
+                'Fokus Anda',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Divider(color: Colors.grey),
+              ...pendingTasks.map(
+                (task) => TaskItem(
+                  task: task,
+                  onToggle: () => controller.toggleTaskCompletion(task.id),
+                  onDelete: () => controller.deleteTask(task.id),
+                  onShowDetails: () => _showTaskDetailsDialog(context, task),
+                ),
+              ),
+              const SizedBox(height: 30),
+
+              // --- 2. Tugas yang Sudah Selesai ---
+              if (completedTasks.isNotEmpty) ...[
                 const Text(
-                  'Fokus Anda',
+                  'Selesai',
                   style: TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
                     fontSize: 18,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
                 const Divider(color: Colors.grey),
-                Expanded(
-                  child: ListView(
-                    children: <Widget>[
-                      ...pendingTasks.map(
-                        (task) => _buildTaskItem(context, task, controller),
-                      ),
-                      const SizedBox(height: 30),
-
-                      const Text(
-                        'Selesai',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Divider(color: Colors.grey),
-                      ...completedTasks.map(
-                        (task) => _buildTaskItem(context, task, controller),
-                      ),
-                    ],
+                ...completedTasks.map(
+                  (task) => TaskItem(
+                    task: task,
+                    onToggle: () => controller.toggleTaskCompletion(task.id),
+                    onDelete: () => controller.deleteTask(task.id),
+                    onShowDetails: () => _showTaskDetailsDialog(context, task),
                   ),
                 ),
               ],
-            ),
+            ],
           );
         },
       ),
-      // Tombol FAB tetap menggunakan AppColors.secondary (Neon Green)
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _navigateToAddTask(context),
+        onPressed: () => navigateToAddTask(context),
         backgroundColor: AppColors.secondary,
         child: const Icon(Icons.add, color: AppColors.background),
       ),
-    );
-  }
-
-  Widget _buildTaskItem(
-    BuildContext context,
-    Task task,
-    TaskController controller,
-  ) {
-    return TaskItem(
-      task: task,
-      onToggle: () => controller.toggleTaskCompletion(task.id),
-      onDelete: () => controller.deleteTask(task.id),
-      onShowDetails: () => _showTaskDetailsDialog(context, task),
     );
   }
 }

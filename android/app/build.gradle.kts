@@ -1,3 +1,7 @@
+import java.io.File 
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -6,24 +10,41 @@ plugins {
 }
 
 android {
-    namespace = "com.example.focus_app"
+    namespace = "com.example.focus_app" 
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
-
+    ndkVersion = "27.0.12077973" // NDK Fix
+    
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // START PERBAIKAN KRITIS: Aktifkan Java 8 Desugaring
+        isCoreLibraryDesugaringEnabled = true 
     }
 
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_11.toString()
     }
 
+    // START: Konfigurasi Signing untuk Release Build
+    val signingProperties = Properties()
+    val signingPropertiesFile = rootProject.file("key.properties")
+    
+    if (signingPropertiesFile.exists()) {
+        signingProperties.load(FileInputStream(signingPropertiesFile))
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = File(signingProperties["storeFile"] as String) 
+            keyAlias = signingProperties["keyAlias"] as String
+            storePassword = signingProperties["storePassword"] as String
+            keyPassword = signingProperties["keyPassword"] as String
+        }
+    }
+    // END: Konfigurasi Signing
+
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.focus_app"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = "com.example.focus_app" 
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -32,12 +53,18 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release") 
+            isMinifyEnabled = true
         }
     }
 }
+
+// START PERBAIKAN KRITIS: Tambahkan Desugaring Dependency di luar blok android{}
+dependencies {
+    // Dependency ini digunakan oleh fitur notifikasi
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+}
+// END PERBAIKAN KRITIS
 
 flutter {
     source = "../.."
