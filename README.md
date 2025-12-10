@@ -1,4 +1,4 @@
-# Ocus 🎯
+# Ocus 
 
 **Ocus** adalah aplikasi produktivitas berbasis teknik **Pomodoro** yang dirancang untuk membantu pengguna tetap fokus, mengelola tugas, dan melacak kinerja belajar atau bekerja mereka. Aplikasi ini dibangun menggunakan **Flutter** dengan antarmuka modern (Dark Mode) yang nyaman di mata.
 
