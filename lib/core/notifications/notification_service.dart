@@ -1,4 +1,3 @@
-import 'dart:ui'; // Diperlukan untuk Color
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
@@ -6,6 +5,7 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   static Future<void> initialize() async {
+    // Pastikan icon ini ada di folder android/app/src/main/res/mipmap-*/
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
@@ -40,11 +40,9 @@ class NotificationService {
     bool playSound = true,
   }) async {
     final String channelId = playSound
-        ? 'ocus_channel_sound'
-        : 'ocus_channel_silent';
-    final String channelName = playSound
-        ? 'Ocus Timer (Sound)'
-        : 'Ocus Timer (Silent)';
+        ? 'ocus_notify_v4_sound'
+        : 'ocus_notify_v4_silent';
+    final String channelName = playSound ? 'Ocus Timer' : 'Ocus Timer (Silent)';
 
     final List<AndroidNotificationAction> actions = [
       const AndroidNotificationAction(
@@ -75,11 +73,9 @@ class NotificationService {
       actions: actions,
       styleInformation: const MediaStyleInformation(),
 
-      // --- PERUBAHAN: largeIcon DIHAPUS ---
-      // largeIcon: const DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
 
-      // Warna aksen notifikasi (Hijau Ocus) tetap ada
-      color: const Color(0xFF00FF00),
+      icon:
+          '@mipmap/ic_launcher', 
     );
 
     final DarwinNotificationDetails iOSPlatformChannelSpecifics =
